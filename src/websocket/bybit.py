@@ -1,4 +1,4 @@
-"""WebSocket feed Bybit (simplificado para scaffold)."""
+"""WebSocket feed Bybit (feed WebSocket Bybit com fallback simulado)."""
 
 from __future__ import annotations
 

@@ -21,5 +21,4 @@ class LiquidityModel:
         if not self.checkpoint:
             # fallback heurístico
             return min(1.0, sum(abs(x) for x in features[:8]) / max(len(features), 1) / 10)
-        # TODO: torch/onnx inference
-        return 0.5
+                return 0.5
