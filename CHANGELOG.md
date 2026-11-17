@@ -4,6 +4,22 @@ Todas as mudanças notáveis deste projeto são documentadas neste arquivo.
 
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/).
 
+## [1.1.0] — 2026-11-17
+
+### Mudado
+
+- Análise SMC reescrita com regras explícitas e testadas: BOS/CHoCH, FVG com mitigação, order blocks, liquidez com sweep e premium/discount.
+
+### Adicionado
+
+- Velas da API REST pública da Bybit ou de CSV.
+- Gráfico HTML em SVG puro e estatísticas descritivas.
+- CLI `smcscan`.
+
+### Removido
+
+- A rede neural sem dados de treino (o score não tinha significado) e as dependências torch/onnx.
+
 ## [1.0.0] — 2026-03-26
 
 ### Adicionado

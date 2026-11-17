@@ -1,83 +1,27 @@
-# Arquitetura — SMC Liquidity Scanner
+# Arquitetura e definições
 
-> Versão do documento: **1.0.0** · Última revisão: **2026-03-26**
-
-## 1. Visão geral
-
-Pipeline que ingere candles via WebSocket, calcula features SMC e classifica setups com modelo treinável.
-
-Este documento descreve como os componentes se relacionam, onde há estado, e como escalar ou observar o sistema em produção.
-
-## 2. Diagrama de contexto
-
-```mermaid
-flowchart TB
-  WS[Feed WebSocket] --> FE[Features / indicadores]
-  FE --> ML[Modelo / ONNX]
-  ML --> DB[(TimescaleDB)]
-  DB --> GF[Grafana / alertas]
+```
+src/smcscan/
+  analysis.py  swings, estrutura (BOS/CHoCH), FVG, order blocks, pools de liquidez, estatísticas
+  data.py      velas de CSV ou da API pública da Bybit (v5)
+  chart.py     gráfico HTML com SVG puro
+  cli.py       smcscan scan
 ```
 
-## 3. Componentes principais
+## Definições usadas (e testadas)
 
-| Componente | Responsabilidade |
-|------------|------------------|
-| Feed | Feed WebSocket Bybit/B3 com reconexão automática |
-| Features | Features SMC: swings, order blocks, fair value gaps |
-| Modelo | Modelo LSTM com exportação ONNX para inferência |
-| Persistência | Persistência TimescaleDB e dashboard Grafana |
-| Docker | Docker Compose para stack completa |
-| Observabilidade | Métricas, logs estruturados e health checks |
-| Persistência | Estado durável e idempotência onde aplicável |
+| Conceito | Regra no código |
+|---|---|
+| **Swing high/low** | Fractal: a máxima (mínima) é estritamente maior (menor) que as `n` velas de cada lado. Só passa a valer depois de confirmado, `n` velas depois. |
+| **BOS** | Fechamento além do último swing confirmado, **a favor** da tendência atual (ou a primeira quebra, partindo de neutro). |
+| **CHoCH** | Fechamento além do último swing confirmado **contra** a tendência atual, o que inverte a tendência. |
+| **FVG** | Padrão de 3 velas em que a mínima da 3ª fica acima da máxima da 1ª (alta), ou o inverso (baixa). *Mitigado* quando o preço volta até o meio do gap; *preenchido* quando atravessa o gap inteiro. |
+| **Order block** | A última vela contrária entre o swing rompido e a vela que fez o BOS/CHoCH. É mitigado quando o preço volta à zona dela. |
+| **Pool de liquidez** | Dois ou mais topos (fundos) dentro de uma tolerância relativa (padrão 0,1%). *Varrido* quando uma vela passa o nível no pavio e **fecha de volta** do lado de dentro. |
+| **Premium/discount** | Acima ou abaixo do meio do range entre o último swing high e o último swing low. |
 
-## 4. Fluxos críticos
+Cada regra tem um teste com velas construídas à mão em `tests/test_smc.py`.
 
-### 4.1 Caminho feliz
+## Por que não há "modelo de IA"
 
-1. Cliente ou operador envia requisição/evento.
-2. Camada de serviço valida entrada e autentica quando necessário.
-3. Núcleo de domínio executa regra de negócio.
-4. Resultado é persistido e/ou publicado para assinantes.
-5. Métricas e logs registram latência e resultado.
-
-### 4.2 Falhas e degradação
-
-- Timeouts configuráveis em integrações externas.
-- Retry com backoff apenas onde a operação é idempotente.
-- Modo degradado documentado no README (ex.: sem LLM, sem GPU).
-
-## 5. Decisões de design
-
-| Decisão | Motivação |
-|---------|-----------|
-| **Baixa latência** | Hot path sem alocações desnecessárias no núcleo |
-| **Fail-safe** | Falha parcial não corrompe estado; reconciliação quando possível |
-| **Auditabilidade** | Logs estruturados com identificador de correlação |
-| **Testabilidade** | Contratos estáveis e testes automatizados na CI |
-
-## 6. Escalabilidade
-
-- Escale horizontalmente camadas **stateless** (API, workers).
-- Particione estado por chave de negócio (símbolo, tenant, shard).
-- Use filas para picos assimétricos entre produtor e consumidor.
-
-## 7. Observabilidade
-
-| Sinal | Uso |
-|-------|-----|
-| Latência p50/p99 | SLO de experiência |
-| Taxa de erro | Alertas de regressão |
-| Utilização CPU/GPU | Capacity planning |
-| Lag de fila | Autoscaling |
-
-## 8. Segurança na arquitetura
-
-- Segredos apenas em variáveis de ambiente ou secret manager.
-- Princípio do menor privilégio em tokens de API e RBAC.
-- Dados sensíveis: minimize retenção e documente bases legais (LGPD quando aplicável).
-
-## 9. Referências
-
-- [README](../README.md) — visão do produto
-- [DEPLOYMENT.md](DEPLOYMENT.md) — ambientes
-- [OPERATIONS.md](OPERATIONS.md) — runbook
+A versão anterior tinha uma rede neural sem dados de treino, que devolvia um score sem significado. Ela foi removida. As estatísticas (`stats`) descrevem o histórico analisado: taxa de preenchimento de FVG, nº de BOS/CHoCH, pools varridos. Elas **não** preveem preço.
